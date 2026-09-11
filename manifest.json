@@ -34,7 +34,7 @@
     },
     "schema": [
       {"key":"refreshIntervalSec","type":"integer","label":"Refresh interval (seconds)","min":1,"max":60,"step":1,"defaultValue":3},
-      {"key":"modules","type":"string","label":"Pills to show (csv of cpu, memory, gpu, disk, network)","defaultValue":"cpu,memory,gpu,disk,network"},
+      {"key":"modules","type":"string","label":"Pills to show (csv of cpu, memory, gpu, disk, network)","defaultValue":"cpu,memory,disk,network"},
       {"key":"cpuAccent","type":"string","label":"CPU accent","defaultValue":"#F59E0B"},
       {"key":"memoryAccent","type":"string","label":"Memory accent","defaultValue":"#22C55E"},
       {"key":"gpuAccent","type":"string","label":"GPU accent","defaultValue":"#8B5CF6"},
