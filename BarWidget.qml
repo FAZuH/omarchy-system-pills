@@ -9,9 +9,15 @@ BarWidget {
   moduleName: "bit-dev.system-pills"
   property int cpuPercent: 0
   property int memoryPercent: 0
+  property real memoryUsedBytes: 0
+  property real memoryTotalBytes: 0
+  property real memoryFreeBytes: 0
   property int diskPercent: 0
   property real diskReadBps: 0
   property real diskWriteBps: 0
+  property real diskUsedBytes: 0
+  property real diskTotalBytes: 0
+  property real diskFreeBytes: 0
   property real netDownBps: 0
   property real netUpBps: 0
   property var cpuCores: []
@@ -20,8 +26,6 @@ BarWidget {
   property real previousDiskRead: 0
   property real previousDiskWrite: 0
   property real previousDiskMs: 0
-  property real diskReadTotal: 0
-  property real diskWriteTotal: 0
   property real previousNetRx: 0
   property real previousNetTx: 0
   property real previousRxMs: 0
@@ -74,6 +78,12 @@ BarWidget {
     }
     return lines.join("\n")
   }
+  function memoryTooltip() {
+    return "Memory " + memoryPercent + "% · " + fmtBytes(memoryUsedBytes) + "/" + fmtBytes(memoryTotalBytes) + " (" + fmtBytes(memoryFreeBytes) + " free)"
+  }
+  function diskTooltip() {
+    return "Disk " + diskDevice + ": " + diskPercent + "% busy · R " + fmtSpeed(diskReadBps) + " · W " + fmtSpeed(diskWriteBps) + " · " + fmtBytes(diskUsedBytes) + "/" + fmtBytes(diskTotalBytes) + " (" + fmtBytes(diskFreeBytes) + " free)"
+  }
   function parseCpu(raw) {
     var lines = String(raw || "").split("\n"), cores = []
     for (var l = 0; l < lines.length; l++) {
@@ -94,7 +104,10 @@ BarWidget {
   function parseMemory(raw) {
     var lines = String(raw || "").split("\n"), total = 0, available = 0
     for (var i = 0; i < lines.length; i++) { var parts = lines[i].trim().split(/\s+/); if (parts[0] === "MemTotal:") total = Number(parts[1] || 0); else if (parts[0] === "MemAvailable:") available = Number(parts[1] || 0) }
-    if (total > 0) memoryPercent = Math.max(0, Math.min(100, Math.round((1 - available / total) * 100)))
+    if (total > 0) {
+      memoryPercent = Math.max(0, Math.min(100, Math.round((1 - available / total) * 100)))
+      memoryTotalBytes = total * 1024; memoryFreeBytes = available * 1024; memoryUsedBytes = Math.max(0, (total - available) * 1024)
+    }
   }
   function parseDisk(raw) {
     var now = Date.now(), elapsed = previousDiskMs > 0 ? now - previousDiskMs : 0
@@ -110,9 +123,16 @@ BarWidget {
       }
       previousDiskIoMs = ioMs; previousDiskRead = readSectors; previousDiskWrite = writeSectors
       previousDiskMs = now
-      diskReadTotal = readSectors * 512; diskWriteTotal = writeSectors * 512
       return
     }
+  }
+  function parseDf(raw) {
+    var lines = String(raw || "").trim().split("\n")
+    if (lines.length < 2) return
+    var f = lines[1].trim().split(/\s+/)
+    if (f.length < 3) return
+    var used = Number(f[0]) || 0, size = Number(f[1]) || 0, avail = Number(f[2]) || 0
+    if (size > 0) { diskUsedBytes = used; diskTotalBytes = size; diskFreeBytes = avail }
   }
   function parseNetRoute(raw) {
     if (networkInterface !== "auto") { netIface = networkInterface; return }
@@ -136,7 +156,7 @@ BarWidget {
   }
   function refresh() {
     cpuFile.reload(); memoryFile.reload()
-    if (hasModule("disk")) diskFile.reload()
+    if (hasModule("disk")) { diskFile.reload(); if (!dfProcess.running) dfProcess.running = true }
     if (hasModule("network")) { routeFile.reload(); if (netIface) { rxFile.reload(); txFile.reload() } }
   }
 
@@ -147,17 +167,22 @@ BarWidget {
   FileView { id: routeFile; path: "/proc/net/route"; watchChanges: false; printErrors: false; onLoaded: root.parseNetRoute(text()) }
   FileView { id: rxFile; path: root.netIface ? "/sys/class/net/" + root.netIface + "/statistics/rx_bytes" : ""; watchChanges: false; printErrors: false; onLoaded: root.parseNetRx(text()) }
   FileView { id: txFile; path: root.netIface ? "/sys/class/net/" + root.netIface + "/statistics/tx_bytes" : ""; watchChanges: false; printErrors: false; onLoaded: root.parseNetTx(text()) }
+  Process {
+    id: dfProcess
+    command: ["df", "-B1", "--output=used,size,avail", "/"]
+    stdout: StdioCollector { waitForEnd: true; onStreamFinished: root.parseDf(text) }
+  }
 
   Row { id: row; visible: !root.vertical; spacing: Style.space(3)
     SystemPill { visible: root.hasModule("cpu"); bar: root.bar; metricName: "CPU"; value: root.cpuPercent + "%"; tooltipText: root.cpuTooltip(); iconSource: Qt.resolvedUrl("assets/cpu.svg"); accent: root.cpuAccent; tintOpacity: root.tintOpacity; displayMode: "full" }
-    SystemPill { visible: root.hasModule("memory"); bar: root.bar; metricName: "Memory"; value: root.memoryPercent + "%"; iconSource: Qt.resolvedUrl("assets/memory.svg"); accent: root.memoryAccent; tintOpacity: root.tintOpacity; displayMode: "full" }
-    SystemPill { visible: root.hasModule("disk"); bar: root.bar; metricName: "Disk"; value: root.diskPercent + "%"; tooltipText: "Disk " + root.diskDevice + ": " + root.diskPercent + "% busy · R " + root.fmtSpeed(root.diskReadBps) + " · W " + root.fmtSpeed(root.diskWriteBps) + " · total R " + root.fmtBytes(root.diskReadTotal) + " / W " + root.fmtBytes(root.diskWriteTotal); iconSource: Qt.resolvedUrl("assets/disk.svg"); accent: root.diskAccent; tintOpacity: root.tintOpacity; displayMode: "full" }
+    SystemPill { visible: root.hasModule("memory"); bar: root.bar; metricName: "Memory"; value: root.memoryPercent + "%"; tooltipText: root.memoryTooltip(); iconSource: Qt.resolvedUrl("assets/memory.svg"); accent: root.memoryAccent; tintOpacity: root.tintOpacity; displayMode: "full" }
+    SystemPill { visible: root.hasModule("disk"); bar: root.bar; metricName: "Disk"; value: root.diskPercent + "%"; tooltipText: root.diskTooltip(); iconSource: Qt.resolvedUrl("assets/disk.svg"); accent: root.diskAccent; tintOpacity: root.tintOpacity; displayMode: "full" }
     SystemPill { visible: root.hasModule("network"); bar: root.bar; metricName: "Network"; value: "↓" + root.fmtSpeed(root.netDownBps).replace(" ", "") + " ↑" + root.fmtSpeed(root.netUpBps).replace(" ", ""); tooltipText: (root.netIface || "n/a") + ": ↓ " + root.fmtSpeed(root.netDownBps) + " · ↑ " + root.fmtSpeed(root.netUpBps) + " · total ↓ " + root.fmtBytes(root.netRxTotal) + " / ↑ " + root.fmtBytes(root.netTxTotal); showIcon: false; accent: root.networkAccent; tintOpacity: root.tintOpacity; displayMode: "full" }
   }
   Column { id: column; visible: root.vertical; spacing: Style.space(3)
     SystemPill { visible: root.hasModule("cpu"); bar: root.bar; metricName: "CPU"; value: root.cpuPercent + "%"; tooltipText: root.cpuTooltip(); iconSource: Qt.resolvedUrl("assets/cpu.svg"); accent: root.cpuAccent; tintOpacity: root.tintOpacity; displayMode: "minimal"; width: root.barSize }
-    SystemPill { visible: root.hasModule("memory"); bar: root.bar; metricName: "Memory"; value: root.memoryPercent + "%"; iconSource: Qt.resolvedUrl("assets/memory.svg"); accent: root.memoryAccent; tintOpacity: root.tintOpacity; displayMode: "minimal"; width: root.barSize }
-    SystemPill { visible: root.hasModule("disk"); bar: root.bar; metricName: "Disk"; value: root.diskPercent + "%"; tooltipText: "Disk " + root.diskDevice + ": " + root.diskPercent + "% busy · R " + root.fmtSpeed(root.diskReadBps) + " · W " + root.fmtSpeed(root.diskWriteBps) + " · total R " + root.fmtBytes(root.diskReadTotal) + " / W " + root.fmtBytes(root.diskWriteTotal); iconSource: Qt.resolvedUrl("assets/disk.svg"); accent: root.diskAccent; tintOpacity: root.tintOpacity; displayMode: "minimal"; width: root.barSize }
+    SystemPill { visible: root.hasModule("memory"); bar: root.bar; metricName: "Memory"; value: root.memoryPercent + "%"; tooltipText: root.memoryTooltip(); iconSource: Qt.resolvedUrl("assets/memory.svg"); accent: root.memoryAccent; tintOpacity: root.tintOpacity; displayMode: "minimal"; width: root.barSize }
+    SystemPill { visible: root.hasModule("disk"); bar: root.bar; metricName: "Disk"; value: root.diskPercent + "%"; tooltipText: root.diskTooltip(); iconSource: Qt.resolvedUrl("assets/disk.svg"); accent: root.diskAccent; tintOpacity: root.tintOpacity; displayMode: "minimal"; width: root.barSize }
     SystemPill { visible: root.hasModule("network"); bar: root.bar; metricName: "Network"; value: "↓" + root.fmtSpeed(root.netDownBps).replace(" ", "") + " ↑" + root.fmtSpeed(root.netUpBps).replace(" ", ""); tooltipText: (root.netIface || "n/a") + ": ↓ " + root.fmtSpeed(root.netDownBps) + " · ↑ " + root.fmtSpeed(root.netUpBps) + " · total ↓ " + root.fmtBytes(root.netRxTotal) + " / ↑ " + root.fmtBytes(root.netTxTotal); showIcon: false; accent: root.networkAccent; tintOpacity: root.tintOpacity; displayMode: "minimal"; width: root.barSize }
   }
 }
