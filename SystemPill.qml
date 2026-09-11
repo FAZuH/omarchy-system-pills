@@ -13,6 +13,7 @@ Item {
   property string displayMode: "full"
   property string tooltipText: ""
   property bool showIcon: true
+  readonly property bool tooltipHovered: mouseArea.containsMouse
   signal pressed(int button)
 
   readonly property color baseColor: bar ? bar.background : Color.background
@@ -43,6 +44,7 @@ Item {
     Text { visible: root.displayMode !== "minimal"; anchors.verticalCenter: parent.verticalCenter; text: root.value; color: root.textColor; font.family: root.bar ? root.bar.fontFamily : Style.font.family; font.pixelSize: Style.font.caption; font.bold: true }
   }
   MouseArea {
+    id: mouseArea
     anchors.fill: parent; acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
     onEntered: if (root.bar) root.bar.showTooltip(root, root.tooltipText !== "" ? root.tooltipText : root.metricName + " usage: " + root.value)
     onExited: if (root.bar) root.bar.hideTooltip(root)
