@@ -65,13 +65,15 @@ BarWidget {
   }
   function cpuBar(pct) {
     var cells = Math.round(pct / 10), s = ""
-    for (var i = 0; i < 10; i++) s += i < cells ? "█" : "░"
+    for (var i = 0; i < cells; i++) s += "█"
     return s
   }
   function cpuTooltip() {
     var lines = ["CPU " + cpuPercent + "% · " + cpuCores.length + " cores"]
-    for (var i = 0; i < cpuCores.length; i++)
-      lines.push("C" + (i < 10 ? "0" + i : i) + " " + cpuBar(cpuCores[i]) + " " + cpuCores[i] + "%")
+    for (var i = 0; i < cpuCores.length; i++) {
+      var label = "C" + (i < 10 ? "0" + i : i), pct = "   " + cpuCores[i] + "%"
+      lines.push(label + " " + pct.slice(-4) + " " + cpuBar(cpuCores[i]))
+    }
     return lines.join("\n")
   }
   function parseCpu(raw) {
