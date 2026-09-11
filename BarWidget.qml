@@ -15,8 +15,8 @@ BarWidget {
   property real diskWriteBps: 0
   property real netDownBps: 0
   property real netUpBps: 0
-  property real previousCpuTotal: 0
-  property real previousCpuIdle: 0
+  property var cpuCores: []
+  property var prevCores: ({})
   property real previousDiskIoMs: 0
   property real previousDiskRead: 0
   property real previousDiskWrite: 0
@@ -57,13 +57,33 @@ BarWidget {
     if (bytesPerSecond >= 1024) return Math.round(bytesPerSecond / 1024) + " KB/s"
     return Math.round(bytesPerSecond) + " B/s"
   }
+  function corePct(key, idle, total) {
+    var prev = prevCores[key], pct = -1
+    if (prev && total > prev.total) pct = Math.max(0, Math.min(100, Math.round((1 - (idle - prev.idle) / (total - prev.total)) * 100)))
+    prevCores[key] = { total: total, idle: idle }
+    return pct
+  }
+  function cpuTooltip() {
+    var parts = ["CPU " + cpuPercent + "%"]
+    for (var i = 0; i < cpuCores.length; i++) parts.push("C" + i + " " + cpuCores[i] + "%")
+    return parts.join(" · ")
+  }
   function parseCpu(raw) {
-    var fields = String(raw || "").split("\n")[0].trim().split(/\s+/)
-    if (fields.length < 8 || fields[0] !== "cpu") return
-    var idle = Number(fields[4] || 0) + Number(fields[5] || 0), total = 0
-    for (var i = 1; i < fields.length; i++) total += Number(fields[i] || 0)
-    if (previousCpuTotal > 0 && total > previousCpuTotal) cpuPercent = Math.max(0, Math.min(100, Math.round((1 - (idle - previousCpuIdle) / (total - previousCpuTotal)) * 100)))
-    previousCpuTotal = total; previousCpuIdle = idle
+    var lines = String(raw || "").split("\n"), cores = []
+    for (var l = 0; l < lines.length; l++) {
+      var fields = lines[l].trim().split(/\s+/)
+      if (fields.length < 8) continue
+      var idle = Number(fields[4] || 0) + Number(fields[5] || 0), total = 0
+      for (var i = 1; i < fields.length; i++) total += Number(fields[i] || 0)
+      if (fields[0] === "cpu") {
+        var pct = corePct("total", idle, total)
+        if (pct >= 0) cpuPercent = pct
+      } else if (/^cpu\d+$/.test(fields[0])) {
+        var idx = parseInt(fields[0].slice(3), 10), cpct = corePct("c" + idx, idle, total)
+        cores[idx] = cpct >= 0 ? cpct : (cpuCores[idx] !== undefined ? cpuCores[idx] : 0)
+      }
+    }
+    if (cores.length) cpuCores = cores
   }
   function parseMemory(raw) {
     var lines = String(raw || "").split("\n"), total = 0, available = 0
@@ -136,14 +156,14 @@ BarWidget {
   }
 
   Row { id: row; visible: !root.vertical; spacing: Style.space(3)
-    SystemPill { visible: root.hasModule("cpu"); bar: root.bar; metricName: "CPU"; value: root.cpuPercent + "%"; iconSource: Qt.resolvedUrl("assets/cpu.svg"); accent: root.cpuAccent; tintOpacity: root.tintOpacity; displayMode: "full" }
+    SystemPill { visible: root.hasModule("cpu"); bar: root.bar; metricName: "CPU"; value: root.cpuPercent + "%"; tooltipText: root.cpuTooltip(); iconSource: Qt.resolvedUrl("assets/cpu.svg"); accent: root.cpuAccent; tintOpacity: root.tintOpacity; displayMode: "full" }
     SystemPill { visible: root.hasModule("memory"); bar: root.bar; metricName: "Memory"; value: root.memoryPercent + "%"; iconSource: Qt.resolvedUrl("assets/memory.svg"); accent: root.memoryAccent; tintOpacity: root.tintOpacity; displayMode: "full" }
     SystemPill { visible: root.hasModule("gpu"); bar: root.bar; metricName: "GPU"; value: root.gpuPercent < 0 ? "—" : root.gpuPercent + "%"; iconSource: Qt.resolvedUrl("assets/gpu.svg"); accent: root.gpuAccent; tintOpacity: root.tintOpacity; displayMode: "full" }
     SystemPill { visible: root.hasModule("disk"); bar: root.bar; metricName: "Disk"; value: root.diskPercent + "%"; tooltipText: "Disk " + root.diskDevice + ": " + root.diskPercent + "% busy · R " + root.fmtSpeed(root.diskReadBps) + " · W " + root.fmtSpeed(root.diskWriteBps) + " · total R " + root.fmtBytes(root.diskReadTotal) + " / W " + root.fmtBytes(root.diskWriteTotal); iconSource: Qt.resolvedUrl("assets/disk.svg"); accent: root.diskAccent; tintOpacity: root.tintOpacity; displayMode: "full" }
     SystemPill { visible: root.hasModule("network"); bar: root.bar; metricName: "Network"; value: "↓" + root.fmtSpeed(root.netDownBps).replace(" ", "") + " ↑" + root.fmtSpeed(root.netUpBps).replace(" ", ""); tooltipText: (root.netIface || "n/a") + ": ↓ " + root.fmtSpeed(root.netDownBps) + " · ↑ " + root.fmtSpeed(root.netUpBps) + " · total ↓ " + root.fmtBytes(root.netRxTotal) + " / ↑ " + root.fmtBytes(root.netTxTotal); showIcon: false; accent: root.networkAccent; tintOpacity: root.tintOpacity; displayMode: "full" }
   }
   Column { id: column; visible: root.vertical; spacing: Style.space(3)
-    SystemPill { visible: root.hasModule("cpu"); bar: root.bar; metricName: "CPU"; value: root.cpuPercent + "%"; iconSource: Qt.resolvedUrl("assets/cpu.svg"); accent: root.cpuAccent; tintOpacity: root.tintOpacity; displayMode: "minimal"; width: root.barSize }
+    SystemPill { visible: root.hasModule("cpu"); bar: root.bar; metricName: "CPU"; value: root.cpuPercent + "%"; tooltipText: root.cpuTooltip(); iconSource: Qt.resolvedUrl("assets/cpu.svg"); accent: root.cpuAccent; tintOpacity: root.tintOpacity; displayMode: "minimal"; width: root.barSize }
     SystemPill { visible: root.hasModule("memory"); bar: root.bar; metricName: "Memory"; value: root.memoryPercent + "%"; iconSource: Qt.resolvedUrl("assets/memory.svg"); accent: root.memoryAccent; tintOpacity: root.tintOpacity; displayMode: "minimal"; width: root.barSize }
     SystemPill { visible: root.hasModule("gpu"); bar: root.bar; metricName: "GPU"; value: root.gpuPercent < 0 ? "—" : root.gpuPercent + "%"; iconSource: Qt.resolvedUrl("assets/gpu.svg"); accent: root.gpuAccent; tintOpacity: root.tintOpacity; displayMode: "minimal"; width: root.barSize }
     SystemPill { visible: root.hasModule("disk"); bar: root.bar; metricName: "Disk"; value: root.diskPercent + "%"; tooltipText: "Disk " + root.diskDevice + ": " + root.diskPercent + "% busy · R " + root.fmtSpeed(root.diskReadBps) + " · W " + root.fmtSpeed(root.diskWriteBps) + " · total R " + root.fmtBytes(root.diskReadTotal) + " / W " + root.fmtBytes(root.diskWriteTotal); iconSource: Qt.resolvedUrl("assets/disk.svg"); accent: root.diskAccent; tintOpacity: root.tintOpacity; displayMode: "minimal"; width: root.barSize }
