@@ -11,6 +11,7 @@ Item {
   property color accent: "#6566F1"
   property real tintOpacity: 0.24
   property string displayMode: "full"
+  property string tooltipText: ""
   signal pressed(int button)
 
   readonly property color baseColor: bar ? bar.background : Color.background
@@ -42,7 +43,7 @@ Item {
   }
   MouseArea {
     anchors.fill: parent; acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-    onEntered: if (root.bar) root.bar.showTooltip(root, root.metricName + " usage: " + root.value)
+    onEntered: if (root.bar) root.bar.showTooltip(root, root.tooltipText !== "" ? root.tooltipText : root.metricName + " usage: " + root.value)
     onExited: if (root.bar) root.bar.hideTooltip(root)
     onClicked: function(mouse) { root.triggerPress(mouse.button) }
   }
