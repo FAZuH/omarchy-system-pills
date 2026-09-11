@@ -66,15 +66,15 @@ BarWidget {
     return pct
   }
   function cpuBar(pct) {
-    var cells = Math.round(pct / 10), s = ""
-    for (var i = 0; i < cells; i++) s += "█"
+    var cells = Math.max(0, Math.min(10, Math.round(pct / 10))), s = ""
+    for (var i = 0; i < 10; i++) s += i < cells ? "█" : "░"
     return s
   }
   function cpuTooltip() {
     var lines = ["CPU " + cpuPercent + "% · " + cpuCores.length + " cores"]
     for (var i = 0; i < cpuCores.length; i++) {
-      var label = "C" + (i < 10 ? "0" + i : i), pct = "   " + cpuCores[i] + "%"
-      lines.push(label + " " + pct.slice(-4) + " " + cpuBar(cpuCores[i]))
+      var label = "C" + (i < 10 ? "0" + i : i), pct = cpuCores[i]
+      lines.push(label + " " + (pct < 10 ? "0" + pct : pct) + "% " + cpuBar(pct))
     }
     return lines.join("\n")
   }
