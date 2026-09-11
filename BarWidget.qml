@@ -18,30 +18,19 @@ BarWidget {
   property real diskUsedBytes: 0
   property real diskTotalBytes: 0
   property real diskFreeBytes: 0
-  property real netDownBps: 0
-  property real netUpBps: 0
   property var cpuCores: []
   property var prevCores: ({})
   property real previousDiskIoMs: 0
   property real previousDiskRead: 0
   property real previousDiskWrite: 0
   property real previousDiskMs: 0
-  property real previousNetRx: 0
-  property real previousNetTx: 0
-  property real previousRxMs: 0
-  property real previousTxMs: 0
-  property real netRxTotal: 0
-  property real netTxTotal: 0
-  property string netIface: ""
   readonly property int intervalMs: Math.max(1000, Number(setting("refreshIntervalSec", 3)) * 1000)
   readonly property real tintOpacity: validOpacity(setting("pillOpacity", 0.24))
   readonly property color cpuAccent: validColor(setting("cpuAccent", "#F59E0B"), "#F59E0B")
   readonly property color memoryAccent: validColor(setting("memoryAccent", "#22C55E"), "#22C55E")
   readonly property color diskAccent: validColor(setting("diskAccent", "#38BDF8"), "#38BDF8")
-  readonly property color networkAccent: validColor(setting("networkAccent", "#EC4899"), "#EC4899")
   readonly property string diskDevice: String(setting("diskDevice", "nvme0n1"))
-  readonly property string networkInterface: String(setting("networkInterface", "auto"))
-  readonly property var modules: String(setting("modules", "cpu,memory,disk,network")).split(",").map(function (m) { return m.trim() })
+  readonly property var modules: String(setting("modules", "cpu,memory,disk")).split(",").map(function (m) { return m.trim() })
   implicitWidth: vertical ? column.implicitWidth : row.implicitWidth
   implicitHeight: vertical ? column.implicitHeight : (bar ? bar.barSize : Style.bar.sizeHorizontal)
 
@@ -134,39 +123,15 @@ BarWidget {
     var used = Number(f[0]) || 0, size = Number(f[1]) || 0, avail = Number(f[2]) || 0
     if (size > 0) { diskUsedBytes = used; diskTotalBytes = size; diskFreeBytes = avail }
   }
-  function parseNetRoute(raw) {
-    if (networkInterface !== "auto") { netIface = networkInterface; return }
-    var lines = String(raw || "").split("\n")
-    for (var i = 1; i < lines.length; i++) {
-      var f = lines[i].trim().split(/\s+/)
-      if (f.length >= 2 && f[1] === "00000000") { netIface = f[0]; return }
-    }
-  }
-  function parseNetRx(raw) {
-    var now = Date.now(), elapsed = previousRxMs > 0 ? now - previousRxMs : 0
-    var rx = Number(String(raw || "").trim()) || 0
-    if (elapsed > 0 && previousNetRx > 0) netDownBps = Math.max(0, (rx - previousNetRx) / elapsed * 1000)
-    previousNetRx = rx; previousRxMs = now; netRxTotal = rx
-  }
-  function parseNetTx(raw) {
-    var now = Date.now(), elapsed = previousTxMs > 0 ? now - previousTxMs : 0
-    var tx = Number(String(raw || "").trim()) || 0
-    if (elapsed > 0 && previousNetTx > 0) netUpBps = Math.max(0, (tx - previousNetTx) / elapsed * 1000)
-    previousNetTx = tx; previousTxMs = now; netTxTotal = tx
-  }
   function refresh() {
     cpuFile.reload(); memoryFile.reload()
     if (hasModule("disk")) { diskFile.reload(); if (!dfProcess.running) dfProcess.running = true }
-    if (hasModule("network")) { routeFile.reload(); if (netIface) { rxFile.reload(); txFile.reload() } }
   }
 
   Timer { interval: root.intervalMs; running: true; repeat: true; triggeredOnStart: true; onTriggered: root.refresh() }
   FileView { id: cpuFile; path: "/proc/stat"; watchChanges: false; printErrors: false; onLoaded: root.parseCpu(text()) }
   FileView { id: memoryFile; path: "/proc/meminfo"; watchChanges: false; printErrors: false; onLoaded: root.parseMemory(text()) }
   FileView { id: diskFile; path: "/proc/diskstats"; watchChanges: false; printErrors: false; onLoaded: root.parseDisk(text()) }
-  FileView { id: routeFile; path: "/proc/net/route"; watchChanges: false; printErrors: false; onLoaded: root.parseNetRoute(text()) }
-  FileView { id: rxFile; path: root.netIface ? "/sys/class/net/" + root.netIface + "/statistics/rx_bytes" : ""; watchChanges: false; printErrors: false; onLoaded: root.parseNetRx(text()) }
-  FileView { id: txFile; path: root.netIface ? "/sys/class/net/" + root.netIface + "/statistics/tx_bytes" : ""; watchChanges: false; printErrors: false; onLoaded: root.parseNetTx(text()) }
   Process {
     id: dfProcess
     command: ["df", "-B1", "--output=used,size,avail", "/"]
@@ -177,12 +142,10 @@ BarWidget {
     SystemPill { visible: root.hasModule("cpu"); bar: root.bar; metricName: "CPU"; value: root.cpuPercent + "%"; tooltipText: root.cpuTooltip(); iconSource: Qt.resolvedUrl("assets/cpu.svg"); accent: root.cpuAccent; tintOpacity: root.tintOpacity; displayMode: "full" }
     SystemPill { visible: root.hasModule("memory"); bar: root.bar; metricName: "Memory"; value: root.memoryPercent + "%"; tooltipText: root.memoryTooltip(); iconSource: Qt.resolvedUrl("assets/memory.svg"); accent: root.memoryAccent; tintOpacity: root.tintOpacity; displayMode: "full" }
     SystemPill { visible: root.hasModule("disk"); bar: root.bar; metricName: "Disk"; value: root.diskPercent + "%"; tooltipText: root.diskTooltip(); iconSource: Qt.resolvedUrl("assets/disk.svg"); accent: root.diskAccent; tintOpacity: root.tintOpacity; displayMode: "full" }
-    SystemPill { visible: root.hasModule("network"); bar: root.bar; metricName: "Network"; value: "↓" + root.fmtSpeed(root.netDownBps).replace(" ", "") + " ↑" + root.fmtSpeed(root.netUpBps).replace(" ", ""); tooltipText: (root.netIface || "n/a") + ": ↓ " + root.fmtSpeed(root.netDownBps) + " · ↑ " + root.fmtSpeed(root.netUpBps) + " · total ↓ " + root.fmtBytes(root.netRxTotal) + " / ↑ " + root.fmtBytes(root.netTxTotal); showIcon: false; accent: root.networkAccent; tintOpacity: root.tintOpacity; displayMode: "full" }
   }
   Column { id: column; visible: root.vertical; spacing: Style.space(3)
     SystemPill { visible: root.hasModule("cpu"); bar: root.bar; metricName: "CPU"; value: root.cpuPercent + "%"; tooltipText: root.cpuTooltip(); iconSource: Qt.resolvedUrl("assets/cpu.svg"); accent: root.cpuAccent; tintOpacity: root.tintOpacity; displayMode: "minimal"; width: root.barSize }
     SystemPill { visible: root.hasModule("memory"); bar: root.bar; metricName: "Memory"; value: root.memoryPercent + "%"; tooltipText: root.memoryTooltip(); iconSource: Qt.resolvedUrl("assets/memory.svg"); accent: root.memoryAccent; tintOpacity: root.tintOpacity; displayMode: "minimal"; width: root.barSize }
     SystemPill { visible: root.hasModule("disk"); bar: root.bar; metricName: "Disk"; value: root.diskPercent + "%"; tooltipText: root.diskTooltip(); iconSource: Qt.resolvedUrl("assets/disk.svg"); accent: root.diskAccent; tintOpacity: root.tintOpacity; displayMode: "minimal"; width: root.barSize }
-    SystemPill { visible: root.hasModule("network"); bar: root.bar; metricName: "Network"; value: "↓" + root.fmtSpeed(root.netDownBps).replace(" ", "") + " ↑" + root.fmtSpeed(root.netUpBps).replace(" ", ""); tooltipText: (root.netIface || "n/a") + ": ↓ " + root.fmtSpeed(root.netDownBps) + " · ↑ " + root.fmtSpeed(root.netUpBps) + " · total ↓ " + root.fmtBytes(root.netRxTotal) + " / ↑ " + root.fmtBytes(root.netTxTotal); showIcon: false; accent: root.networkAccent; tintOpacity: root.tintOpacity; displayMode: "minimal"; width: root.barSize }
   }
 }
