@@ -22,7 +22,7 @@
     "defaultSection": "left",
     "defaults": {
       "refreshIntervalSec": 3,
-      "modules": "cpu,memory,gpu,disk,network",
+      "modules": "cpu,memory,disk,network",
       "cpuAccent": "#F59E0B",
       "memoryAccent": "#22C55E",
       "gpuAccent": "#8B5CF6",

@@ -12,6 +12,7 @@ Item {
   property real tintOpacity: 0.24
   property string displayMode: "full"
   property string tooltipText: ""
+  property bool showIcon: true
   signal pressed(int button)
 
   readonly property color baseColor: bar ? bar.background : Color.background
@@ -38,7 +39,7 @@ Item {
   }
   Row {
     id: content; anchors.centerIn: parent; spacing: Style.space(4)
-    Image { width: Style.space(14); height: width; anchors.verticalCenter: parent.verticalCenter; source: root.iconSource; fillMode: Image.PreserveAspectFit; smooth: true; mipmap: true }
+    Image { visible: root.showIcon; width: Style.space(14); height: width; anchors.verticalCenter: parent.verticalCenter; source: root.iconSource; fillMode: Image.PreserveAspectFit; smooth: true; mipmap: true }
     Text { visible: root.displayMode !== "minimal"; anchors.verticalCenter: parent.verticalCenter; text: root.value; color: root.textColor; font.family: root.bar ? root.bar.fontFamily : Style.font.family; font.pixelSize: Style.font.caption; font.bold: true }
   }
   MouseArea {
