@@ -8,7 +8,6 @@ Item {
   property var consumers: []
   property int cpuPercent: 0
   property int memoryPercent: 0
-  property int gpuPercent: -1
   property real previousCpuTotal: 0
   property real previousCpuIdle: 0
   readonly property bool polling: consumers.length > 0
@@ -35,7 +34,6 @@ Item {
   function refresh() {
     if (!polling) return
     cpuFile.reload(); memoryFile.reload()
-    if (!gpuProcess.running) gpuProcess.running = true
   }
   function parseCpu(raw) {
     var fields = String(raw || "").split("\n")[0].trim().split(/\s+/)
@@ -57,18 +55,7 @@ Item {
     }
     if (total > 0) memoryPercent = Math.max(0, Math.min(100, Math.round((1 - available / total) * 100)))
   }
-  function parseGpu(raw) {
-    var value = Number(String(raw || "").trim().split(/\s+/)[0])
-    gpuPercent = isFinite(value) ? Math.max(0, Math.min(100, Math.round(value))) : -1
-  }
-
   Timer { interval: root.intervalMs; running: root.polling; repeat: true; onTriggered: root.refresh() }
   FileView { id: cpuFile; path: "/proc/stat"; watchChanges: false; printErrors: false; onLoaded: root.parseCpu(text()) }
   FileView { id: memoryFile; path: "/proc/meminfo"; watchChanges: false; printErrors: false; onLoaded: root.parseMemory(text()) }
-  Process {
-    id: gpuProcess
-    command: ["nvidia-smi", "--query-gpu=utilization.gpu", "--format=csv,noheader,nounits"]
-    stdout: StdioCollector { waitForEnd: true; onStreamFinished: root.parseGpu(text) }
-    onExited: if (exitCode !== 0) root.gpuPercent = -1
-  }
 }
