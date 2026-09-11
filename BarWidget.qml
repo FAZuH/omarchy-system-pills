@@ -63,10 +63,16 @@ BarWidget {
     prevCores[key] = { total: total, idle: idle }
     return pct
   }
+  function cpuBar(pct) {
+    var cells = Math.round(pct / 10), s = ""
+    for (var i = 0; i < 10; i++) s += i < cells ? "█" : "░"
+    return s
+  }
   function cpuTooltip() {
-    var parts = ["CPU " + cpuPercent + "%"]
-    for (var i = 0; i < cpuCores.length; i++) parts.push("C" + i + " " + cpuCores[i] + "%")
-    return parts.join(" · ")
+    var lines = ["CPU " + cpuPercent + "% · " + cpuCores.length + " cores"]
+    for (var i = 0; i < cpuCores.length; i++)
+      lines.push("C" + (i < 10 ? "0" + i : i) + " " + cpuBar(cpuCores[i]) + " " + cpuCores[i] + "%")
+    return lines.join("\n")
   }
   function parseCpu(raw) {
     var lines = String(raw || "").split("\n"), cores = []
